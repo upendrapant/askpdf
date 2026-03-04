@@ -1,6 +1,4 @@
 """
-rag/embedder.py
----------------
 Takes a list of LangChain Documents, embeds them using Google Gemini embeddings,
 and stores them in a local ChromaDB instance, replacing any previously uploaded documents.
 """

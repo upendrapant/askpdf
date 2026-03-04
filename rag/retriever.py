@@ -1,6 +1,4 @@
 """
-rag/retriever.py
-----------------
 Handles the retrieval and generation aspect of the RAG pipeline.
 Retrieves relevant documents, formats the context, queries Gemini,
 and returns the final answer along with source pages.
@@ -23,22 +21,24 @@ def retrieve_and_answer(question: str, vectorstore: Chroma) -> Dict[str, Any]:
     retrieved_docs = vectorstore.similarity_search(question, k=4)
     
     # 2. Extract sources and format context
-    sources: List[int] = []
+    sources: List[Dict[str, Any]] = []
     context_parts: List[str] = []
     
     for doc in retrieved_docs:
         # We explicitly rely on the metadata structured in loader.py
         page = doc.metadata.get("page", 0)
         
-        if page not in sources:
-            sources.append(page)
+        sources.append({
+            "page": page,
+            "text": doc.page_content.strip()
+        })
             
         # Bind the page number directly next to the chunk text
         context_parts.append(f"Text chunk from Page {page}:\n{doc.page_content}\n---")
         
     formatted_context = "\n\n".join(context_parts)
     
-    model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     llm = ChatGoogleGenerativeAI(
         model=model_name,
         temperature=0.3
@@ -61,5 +61,5 @@ def retrieve_and_answer(question: str, vectorstore: Chroma) -> Dict[str, Any]:
 
     return {
         "answer": answer_text,
-        "sources": sorted(sources)
+        "sources": sources
     }

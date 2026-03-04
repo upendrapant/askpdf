@@ -1,6 +1,4 @@
 """
-prompts/qa_prompt.py
---------------------
 Contains the structured ChatPromptTemplate for strict Retrieval-Augmented Generation (RAG).
 Enforces:
 1. Answering strictly from context.
@@ -16,7 +14,7 @@ Your task is to answer the user's question using ONLY the provided document cont
 Follow these rules exactly:
 1. You must base your answer exclusively on the provided Context. Do not use outside knowledge.
 2. If the Context does not contain the information needed to answer the question, you MUST return EXACTLY this string, with no other text: "I could not find an answer to that in the document."
-3. Every factual claim or piece of information you provide in your answer MUST be cited with the page number where you found it in the Context. Use the metadata provided with each chunk (e.g., "The project is about AI (Page 2).").
+3. Provide your answer clearly and naturally. Do NOT append page citations (like "(Page 1)") inside your text output.
 
 Context information:
 {context}
