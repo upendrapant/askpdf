@@ -23,7 +23,7 @@ def embed_and_store(docs: list[Document]) -> Chroma:
     if not google_api_key:
         raise ValueError("GOOGLE_API_KEY environment variable not found. Did you set up your .env file?")
 
-    embedding_model = os.getenv("GEMINI_EMBEDDING_MODEL", "models/text-embedding-004")
+    embedding_model = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
     persist_directory = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
 
     # Initialize Gemini Embeddings
