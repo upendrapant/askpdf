@@ -3,7 +3,7 @@ import tempfile
 import streamlit as st
 
 from rag.loader import load_and_split
-from rag.embedder import embed_and_store
+from rag.embedder import embed_and_store, clear_chroma_collection, delete_documents_by_source, get_vectorstore
 from rag.retriever import retrieve_and_answer
 
 #Streamlit Page Configuration
@@ -11,55 +11,74 @@ st.set_page_config(page_title="AskPDF", page_icon="📚", layout="wide")
 
 #Initialize session state for caching
 if "vectorstore" not in st.session_state:
-    st.session_state.vectorstore = None
-if "pdf_filename" not in st.session_state:
-    st.session_state.pdf_filename = None
+    st.session_state.vectorstore = get_vectorstore()
+if "processed_files" not in st.session_state:
+    st.session_state.processed_files = set()
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "file_uploader_key" not in st.session_state:
+    st.session_state.file_uploader_key = 0
 
 st.title("💭 Ask your PDF")
 
 st.sidebar.title("📂 Upload PDFs")
-uploaded_file = st.sidebar.file_uploader("Upload your PDF document", type=["pdf"])
 
-if uploaded_file is not None:
-    # Check if we've already processed this specific file
-    if st.session_state.pdf_filename != uploaded_file.name or st.session_state.vectorstore is None:
-        try:
-            with st.sidebar.spinner("Processing PDF (parsing and embedding)..."):
-                # Save the uploaded file to a temporary file because loader.py expects a file path
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                    tmp_file.write(uploaded_file.getvalue())
-                    tmp_path = tmp_file.name
+# New Session Button
+if st.sidebar.button("New Session"):
+    clear_chroma_collection()
+    st.session_state.vectorstore = get_vectorstore()
+    st.session_state.processed_files = set()
+    st.session_state.messages = []
+    st.session_state.file_uploader_key += 1
+    st.rerun()
 
-                # Process the PDF using our RAG pipeline
-                try:
-                    docs = load_and_split(tmp_path)
-                    vectorstore = embed_and_store(docs)
-                    
-                    # Store explicitly in session_state to prevent re-processing on keystrokes
-                    st.session_state.vectorstore = vectorstore
-                    st.session_state.pdf_filename = uploaded_file.name
-                    st.session_state.messages = []  # Clear chat history on new upload
-                    
-                    st.toast(f"Successfully processed `{uploaded_file.name}` ({len(docs)} chunks indexed)!", icon = "✅",duration=10)
-                finally:
-                    # Clean up the temporary file
-                    if os.path.exists(tmp_path):
-                        os.remove(tmp_path)
-        except Exception as e:
-            st.error(f"Error processing the PDF: {str(e)}")
-            st.toast(f"Error processing the PDF: {str(e)}", icon = "❌")
-            st.session_state.vectorstore = None
-            st.session_state.pdf_filename = None
+uploaded_files = st.sidebar.file_uploader(
+    "Upload your PDF documents", 
+    type=["pdf"], 
+    accept_multiple_files=True,
+    key=f"file_uploader_{st.session_state.file_uploader_key}"
+)
 
-else:
-    # Clear session state if the upload widget is cleared
-    if st.session_state.vectorstore is not None:
-        st.session_state.vectorstore = None
-        st.session_state.pdf_filename = None
-        st.session_state.messages = []  # Clear chat history
-        st.toast("Document cleared.", icon = "🗑️", duration=10)
+# Determine files that were removed
+current_uploaded_filenames = {f.name for f in (uploaded_files or [])}
+files_to_remove = st.session_state.processed_files - current_uploaded_filenames
+
+if files_to_remove:
+    for file_name in files_to_remove:
+        delete_documents_by_source(file_name)
+        st.session_state.processed_files.remove(file_name)
+        st.toast(f"Removed data for `{file_name}`.", icon="🗑️")
+    
+    # If all files are removed, we can just clear chat
+    if not st.session_state.processed_files:
+        st.session_state.messages = []
+        st.toast("All documents cleared.", icon="🗑️", duration=10)
+
+# Process new files
+if uploaded_files:
+    for uploaded_file in uploaded_files:
+        if uploaded_file.name not in st.session_state.processed_files:
+            try:
+                with st.sidebar.spinner(f"Processing `{uploaded_file.name}` (parsing and embedding)..."):
+                    # Save the uploaded file to a temporary file because loader.py expects a file path
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                        tmp_file.write(uploaded_file.getvalue())
+                        tmp_path = tmp_file.name
+
+                    # Process the PDF using our RAG pipeline
+                    try:
+                        docs = load_and_split(tmp_path, original_filename=uploaded_file.name)
+                        st.session_state.vectorstore = embed_and_store(docs)
+                        st.session_state.processed_files.add(uploaded_file.name)
+                        
+                        st.toast(f"Successfully processed `{uploaded_file.name}` ({len(docs)} chunks indexed)!", icon="✅", duration=10)
+                    finally:
+                        # Clean up the temporary file
+                        if os.path.exists(tmp_path):
+                            os.remove(tmp_path)
+            except Exception as e:
+                st.error(f"Error processing `{uploaded_file.name}`: {str(e)}")
+                st.toast(f"Error processing `{uploaded_file.name}`: {str(e)}", icon="❌")
 
 
 # Chat Interface
@@ -75,11 +94,13 @@ for message in st.session_state.messages:
                     st.info(f"Information gathered from: {message['sources']}")
                 else:
                     for src in message["sources"]:
-                        st.markdown(f"**Page {src['page']}**\n> {src['text']}")
+                        # Show filename as well
+                        src_name = src.get("source", "Unknown")
+                        st.markdown(f"**{src_name} - Page {src['page']}**\n> {src['text']}")
 
 # Accept user input using Streamlit's chat input
-is_ready = st.session_state.vectorstore is not None
-prompt = st.chat_input("Ask a question about the document...", disabled=not is_ready)
+is_ready = len(st.session_state.processed_files) > 0
+prompt = st.chat_input("Ask a question about the document(s)...", disabled=not is_ready)
 
 if prompt:
     # Add user message to chat history
@@ -102,7 +123,8 @@ if prompt:
                 if result["sources"]:
                     with st.expander("Sources Context"):
                         for src in result["sources"]:
-                            st.markdown(f"**Page {src['page']}**\n> {src['text']}")
+                            src_name = src.get("source", "Unknown")
+                            st.markdown(f"**{src_name} - Page {src['page']}**\n> {src['text']}")
                 
                 # Add assistant response to chat history
                 st.session_state.messages.append({

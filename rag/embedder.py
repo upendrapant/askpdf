@@ -14,7 +14,12 @@ import chromadb
 
 COLLECTION_NAME = "pdf_store"
 
-def embed_and_store(docs: list[Document]) -> Chroma:
+def get_chroma_client() -> chromadb.PersistentClient:
+    load_dotenv()
+    persist_directory = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
+    return chromadb.PersistentClient(path=persist_directory)
+
+def get_vectorstore() -> Chroma:
     load_dotenv()
 
     google_api_key = os.getenv("GOOGLE_API_KEY")
@@ -31,24 +36,34 @@ def embed_and_store(docs: list[Document]) -> Chroma:
     )
 
     # Initialize standard ChromaDB client
-    chroma_client = chromadb.PersistentClient(path=persist_directory)
+    chroma_client = get_chroma_client()
 
-    # Always delete the existing collection if it exists
+    return Chroma(
+        client=chroma_client,
+        collection_name=COLLECTION_NAME,
+        embedding_function=embeddings,
+        persist_directory=persist_directory
+    )
+
+def embed_and_store(docs: list[Document]) -> Chroma:
+    vectorstore = get_vectorstore()
+    if docs:
+        vectorstore.add_documents(documents=docs)
+    return vectorstore
+
+def delete_documents_by_source(source_name: str):
+    vectorstore = get_vectorstore()
+    try:
+        vectorstore._collection.delete(where={"source": source_name})
+    except Exception as e:
+        print(f"Failed to delete {source_name}: {e}")
+
+def clear_chroma_collection():
+    chroma_client = get_chroma_client()
     try:
         chroma_client.delete_collection(COLLECTION_NAME)
     except Exception:
         pass
-
-    # Create the vector store from documents
-    vectorstore = Chroma.from_documents(
-        documents=docs,
-        embedding=embeddings,
-        collection_name=COLLECTION_NAME,
-        persist_directory=persist_directory,
-        client=chroma_client
-    )
-
-    return vectorstore
 
 
 if __name__ == "__main__":

@@ -18,7 +18,7 @@ CHUNK_OVERLAP = 100
 MIN_TOTAL_CHARS = 100
 
 
-def load_and_split(pdf_path: str | Path) -> list[Document]:
+def load_and_split(pdf_path: str | Path, original_filename: str = None) -> list[Document]:
     pdf_path = Path(pdf_path).resolve()
 
     if not pdf_path.exists():
@@ -54,7 +54,7 @@ def load_and_split(pdf_path: str | Path) -> list[Document]:
     # case a future loader omits it.
     for chunk in chunks:
         chunk.metadata.setdefault("page", 0)
-        chunk.metadata["source"] = str(pdf_path)
+        chunk.metadata["source"] = original_filename if original_filename else str(pdf_path)
 
     return chunks
 

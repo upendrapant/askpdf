@@ -27,14 +27,16 @@ def retrieve_and_answer(question: str, vectorstore: Chroma) -> Dict[str, Any]:
     for doc in retrieved_docs:
         # We explicitly rely on the metadata structured in loader.py
         page = doc.metadata.get("page", 0)
+        source_file = doc.metadata.get("source", "Unknown")
         
         sources.append({
             "page": page,
+            "source": source_file,
             "text": doc.page_content.strip()
         })
             
         # Bind the page number directly next to the chunk text
-        context_parts.append(f"Text chunk from Page {page}:\n{doc.page_content}\n---")
+        context_parts.append(f"Text chunk from {source_file}, Page {page}:\n{doc.page_content}\n---")
         
     formatted_context = "\n\n".join(context_parts)
     
