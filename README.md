@@ -1,5 +1,4 @@
 # 📄 AskPDF
-
 A fast, lightweight Retrieval-Augmented Generation (RAG) web application that lets you upload PDF documents and ask conversational questions about their content.
 
 Built with anti-hallucination in mind, the system forces the LLM to fact-check against the provided document and explicitly cites the internal source pages it uses to formulate its answers.
